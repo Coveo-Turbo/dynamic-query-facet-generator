@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://static.cloud.coveo.com/searchui/v2.9659/js/CoveoJsSearch.Lazy.js"></script>
+    <script src="https://static.cloud.coveo.com/searchui/v2.9659/js/cultures/en.js"></script>
+    <script src="https://static.cloud.coveo.com/searchui/v2.9659/js/templates/templatesNew.js"></script>
+
+    <script src="config.js"></script>
+    <script src="component.js"></script>
+    <!-- <script src="components/<name>.js"></script> -->
+
+    <script src="init.js"></script>
+
+    <link rel="stylesheet" href="https://static.cloud.coveo.com/searchui/v2.9659/css/CoveoFullSearchNewDesign.css" />
+    <link rel="stylesheet" href="component.css" />
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Coveo.SearchEndpoint.endpoints['default'].options.queryStringArguments.viewAllContent = 'true';
+            Coveo.init(document.getElementById('search'), {
+                Analytics: {
+                    searchHub: demoConfig.searchHub,
+                }
+            });
+    
+            const standaloneSearchBoxRoot = document.querySelector('.CoveoSearchInterface');
+        
+            Coveo.initSearchbox(standaloneSearchBoxRoot, demoConfig.searchUrl, {
+                Analytics: {
+                    searchHub: demoConfig.searchHub,
+                },
+            });
+        })
+    </script>
+</head>
+<body>
+    <div id="search" class="CoveoSearchInterface" data-enable-history="true" data-pipeline="BBQs" data-maximum-age=0 data-results-per-page=15>
+        <!-- <div class="CoveoFolding"></div> -->
+        <div class="CoveoAnalytics"></div>
+        <div class="coveo-tab-section">
+          <a class="CoveoTab" data-id="All" data-caption="All Content"></a>
+        </div>
+        <div class="coveo-search-section">
+          <div class="CoveoSearchbox" data-enable-omnibox="true"></div>
+        </div>
+        <div class="coveo-main-section">
+          <div class="coveo-facet-column">
+            <div class="CoveoDynamicFacet" data-title="Brand" data-field="@brand" data-tab="All"></div>
+            <div class="CoveoDynamicQueryFacetGenerator" 
+                 data-query-to-execute="@source==BBQs" 
+                 data-no-of-facets=10 
+                 data-use-advanced-query="true" 
+                 data-dictionary='{"f_grill_type":"Grill Type","brand":"MyBrand"}' 
+                 data-blacklist="product_id,objecttype,category,brand,model,f_kamado_friendly,price,item_type,group_ids" 
+                 data-no-of-results=15></div>
+          </div>
+          <div class="coveo-results-column">
+            <div class="CoveoShareQuery"></div>
+            <div class="CoveoPreferencesPanel">
+              <div class="CoveoResultsPreferences"></div>
+              <div class="CoveoResultsFiltersPreferences"></div>
+            </div>
+            <div class="CoveoTriggers"></div>
+            <div class="CoveoBreadcrumb"></div>
+            <div class="CoveoDidYouMean"></div>
+            <div class="coveo-results-header">
+              <div class="coveo-summary-section">
+                <span class="CoveoQuerySummary"></span>
+                <span class="CoveoQueryDuration"></span>
+              </div>
+              <div class="coveo-result-layout-section">
+                <span class="CoveoResultLayout"></span>
+              </div>
+              <div class="coveo-sort-section">
+                <span class="CoveoSort" data-sort-criteria="relevancy" data-caption="Relevance"></span>
+                <span class="CoveoSort" data-sort-criteria="date descending,date ascending" data-caption="Date"></span>
+              </div>
+            </div>
+            <div class="CoveoHiddenQuery"></div>
+            <div class="CoveoErrorReport" data-pop-up="false"></div>
+            <div class="CoveoResultList" data-layout="list" data-wait-animation="fade" data-auto-select-fields-to-include="true">
+              <script id="Default" class="result-template" type="text/html" data-layout="list"><div class="coveo-result-frame">
+        <div class="coveo-result-cell" style="vertical-align:top;text-align:center;width:100px;">
+          <div class="CoveoFieldValue" data-helper='image' data-helper-options-width="100px" data-html-value="true" data-field="@image_url" style="text-align: center"></div>
+
+          <div class="CoveoQuickview"></div>
+        </div>
+        <div class="coveo-result-cell" style="vertical-align: top;padding-left: 16px;">
+          <div class="coveo-result-row" style="margin-top:0;">
+            <div class="coveo-result-cell" style="vertical-align:top;font-size:16px;" role="heading" aria-level="2">
+              <a class="CoveoResultLink"></a>
+            </div>
+            <div class="coveo-result-cell" style="width:120px;text-align:right;font-size:12px">
+              <div class="coveo-result-row">
+                <span class="CoveoFieldValue" data-field="@date" data-helper="date"></span>
+              </div>
+            </div>
+          </div>
+          <div class="coveo-result-row" style="margin-top:10px;">
+            <div class="coveo-result-cell">
+              <span class="CoveoExcerpt"></span>
+            </div>
+          </div>
+          <div class="coveo-result-row" style="margin-top:10px;">
+            <div class="coveo-result-cell">
+              <span class="CoveoFieldValue" data-field="@author" data-text-caption="Author" style="margin-right:30px;"></span>
+              <span class="CoveoFieldValue" data-field="@source" data-text-caption="Source" style="margin-right:30px;"></span>
+              <span class="CoveoFieldValue" data-field="@language" data-text-caption="Language" style="margin-right:30px;"></span>
+              <span class="CoveoFieldValue" data-field="@filetype" data-text-caption="File Type" style="margin-right:30px;"></span>
+            </div>
+          </div>
+          <div class="coveo-result-row" style="margin-top:10px;">
+            <div class="coveo-result-cell">
+              <div class="CoveoPrintableUri"></div>
+            </div>
+          </div>
+          <div class="coveo-result-row">
+            <div class="coveo-result-cell">
+              <div class="CoveoMissingTerms"></div>
+            </div>
+          </div>
+        </div>
+      </div></script>
+            </div>
+            <div class="CoveoPager" ></div>
+            <div class="CoveoLogo"></div>
+            <div class="CoveoResultsPerPage2"></div>
+          </div>
+        </div>
+    </div>
+</body>
+</html>

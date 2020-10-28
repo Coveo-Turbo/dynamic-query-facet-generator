@@ -1,0 +1,28 @@
+{
+    "name": "@coveops/dynamic-query-facet-generator",
+    "version": "1.0.0",
+    "description": "Dynamically create Facets based upon a quick query",
+    "main": "dist/index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "build": "coveops build DynamicQueryFacetGenerator --template typescript",
+        "watch": "coveops build DynamicQueryFacetGenerator --template typescript --watch",
+        "serve": "coveops serve",
+        "precompile": "npm run build"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "Apache-2.0",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "dependencies": {
+        "@coveops/localization-manager": "^1.0.0",
+        "@coveops/turbo-core": "^1.1.1",
+        "coveo-search-ui": "^2.9856.8"
+    },
+    "devDependencies": {
+        "@coveops/cli": "^0.13.2"
+    }
+}
