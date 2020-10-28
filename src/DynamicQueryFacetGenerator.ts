@@ -57,6 +57,7 @@ export interface IDynamicQueryFacetGeneratorOptions {
   usePush?: boolean;
   usePushAsQuery?: boolean;
   pushGroupField?: string;
+  tresholdPercentage?: number;
   blacklist?: string;
   getDictionaryPromise: () => Promise<IQueryFacetDictionary>;
   dictionary?: IQueryFacetDictionary;
@@ -143,6 +144,10 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
      * noOfResults to retrieve when fetching the facet values
      */
     noOfResults: ComponentOptions.buildNumberOption({ defaultValue: 25 }),
+    /**
+     * treshold percentage of the results which should minimal have the field
+     */
+    tresholdPercentage: ComponentOptions.buildNumberOption({ defaultValue: 30 }),
     /**
      * noOfFacets to retrieve when fetching the facet values
      */
@@ -375,6 +380,7 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
   //private generateFacets(facets: IQueryFacetTransformArgs[]) {
   private generateFacets(facets: string[]) {
     facets.map((facet) => {
+      if (facet!='') {
       const element = $$('div');
       this.element.appendChild(element.el);
       //const generatedFacet = new DynamicFacet(element.el, { field: facet.field, title: facet.facetTitle });
@@ -388,6 +394,7 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
       if (this.cacheFacets[fieldname]!=undefined && this.cacheFacets[fieldname]!=''){
         generatedFacet.selectMultipleValues(this.cacheFacets[fieldname]);
       }
+    }
       //this.ensureFacetState(generatedFacet);
     });
   }
@@ -496,7 +503,8 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
         foundFacets.sort((a, b) => (a.occurences < b.occurences) ? 1 : -1);
         //Only take first xx
         //console.log('Found Facets: '+foundFacets);
-        _this.currentFacets = foundFacets.slice(0,_this.options.noOfFacets).map((facet)=> { return facet.facet});
+        let percentage = _this.options.noOfResults*(_this.options.tresholdPercentage/100);
+        _this.currentFacets = foundFacets.slice(0,_this.options.noOfFacets).map((facet)=> { if (facet.occurences>=percentage)  return facet.facet});
         console.log('Got Facets, re-execute query');
         _this.gotFacets = true;
         _this.addToCache(query);
