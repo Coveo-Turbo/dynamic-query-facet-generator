@@ -1,4 +1,4 @@
-import { Component, DynamicHierarchicalFacet, DynamicFacet } from 'coveo-search-ui';
+import { Component, DynamicHierarchicalFacet, DynamicFacet, Dom, $$ } from 'coveo-search-ui';
 import { map } from 'underscore';
 
 export interface IComponentsTypesSearchInterface {
@@ -6,24 +6,36 @@ export interface IComponentsTypesSearchInterface {
 }
 
 export class ComponentsTypes {
-  static get allFacetsType() {
-    return [DynamicFacet, DynamicHierarchicalFacet];
+  public static get allFacetsType() {
+    return [
+      'DynamicFacet',
+      'DynamicFacetRange',
+      'DynamicHierarchicalFacet'
+    ];
   }
 
-  static get allFacetsTypeString() {
-    return ComponentsTypes.allFacetsType.map((type) => type.ID);
+  public static get allFacetsClassname() {
+    return ComponentsTypes.allFacetsType.map(type => `Coveo${type}`);
   }
 
-  static get allFacetsClassname() {
-    return ComponentsTypes.allFacetsTypeString.map((type) => `Coveo${type}`);
+  public static getAllFacetElementsFromElement(root: HTMLElement | Dom) {
+    const selectors = ComponentsTypes.allFacetsClassname.map(className => `.${className}`).join(', ');
+    const hasNoFacetChild = (element: HTMLElement) => !$$(element).findAll(selectors).length;
+
+    return $$(root as HTMLElement)
+      .findAll(selectors)
+      .filter(hasNoFacetChild);
   }
 
-  static getAllFacetElementsFromElement(root: HTMLElement) {
-    const selectors = ComponentsTypes.allFacetsClassname.map((className) => `.${className}`).join(', ');
-    return root.querySelectorAll(selectors);
+  public static getAllFacetInstancesFromElement(root: HTMLElement | Dom) {
+    return ComponentsTypes.getAllFacetElementsFromElement(root).map(element => Component.get(element) as Component);
   }
 
-  static getAllFacetInstancesFromElement(root: HTMLElement) {
-    return map(ComponentsTypes.getAllFacetElementsFromElement(root), (element: HTMLElement) => Component.get(element) as Component);
+  public static getAllFacetsFromSearchInterface(searchInterface: IComponentsTypesSearchInterface) {
+    return ComponentsTypes.allFacetsType.reduce(
+      (facets: Component[], facetType: string) => facets.concat(searchInterface.getComponents(facetType)),
+      []
+    );
   }
 }
+

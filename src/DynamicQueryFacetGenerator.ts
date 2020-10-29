@@ -17,6 +17,7 @@ import {
   IDoneBuildingQueryEventArgs,
   ExpressionBuilder,
   IQuerySuccessEventArgs,
+  IDependsOnCompatibleFacet,
 } from 'coveo-search-ui';
 import { last, isFunction } from 'underscore';
 import { ComponentsTypes } from './utilities/ComponentsTypes';
@@ -32,6 +33,7 @@ export interface IQueryFacetDictionary {
 class FacetList {
   facet: string;
   occurences: number;
+  values: string[];
 }
 
 class CacheList {
@@ -45,21 +47,17 @@ export interface IQueryFacetTransformArgs {
 }
 
 export interface IDynamicQueryFacetGeneratorOptions {
-  allowedFields?: IFieldOption[];
   queryToExecute?: string;
-  orgId?: string;
   noOfResults?: number;
   noOfFacets?: number;
   dependsOn?: string;
   useAdvancedQuery?: boolean;
-  useCache?: boolean;
-  useOnlyUserFields?:boolean;
+  useOnlyUserFields?: boolean;
   usePush?: boolean;
   usePushAsQuery?: boolean;
   pushGroupField?: string;
   tresholdPercentage?: number;
   blacklist?: string;
-  getDictionaryPromise: () => Promise<IQueryFacetDictionary>;
   dictionary?: IQueryFacetDictionary;
 }
 
@@ -76,7 +74,7 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
   static ID = 'DynamicQueryFacetGenerator';
 
   private dictionary: IQueryFacetDictionary = null;
-  private myCache : CacheList[];
+  private myCache: CacheList[];
   private allFields: string[];
   private previousQuery: string;
   private previousState: string;
@@ -87,16 +85,14 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
   private start: Date;
   private startQ: Date;
   private endQ: Date;
-  private record:boolean;
+  private record: boolean;
   private comment: string;
   private querytime: string;
   private previousSelectedCategory: string = null;
   private localStorage: LocalStorageUtils<{ [caption: string]: string }>;
-  private localStorageFacets: LocalStorageUtils<{ facets: string[] }>;
+  private localStorageFields: LocalStorageUtils<{ fields: string[], expDate: string }>;
 
   static options: IDynamicQueryFacetGeneratorOptions = {
-    useCache: ComponentOptions.buildBooleanOption({ defaultValue: false }),
-    allowedFields: ComponentOptions.buildListOption<string>(),
     /**
      * Specifies a dictionary with
      * To specify the parent facet, use its id.
@@ -110,36 +106,33 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     /**
      * Query filter to execute to get the Facet Values
      */
-    queryToExecute: ComponentOptions.buildStringOption({ defaultValue:''}),
+    queryToExecute: ComponentOptions.buildStringOption({ defaultValue: '' }),
     /**
      * blacklist, do not use the fields in this list
      */
-    blacklist: ComponentOptions.buildStringOption({ defaultValue:''}),
+    blacklist: ComponentOptions.buildStringOption({ defaultValue: '' }),
     /**
      * useAdvancedQuery, trigger on AdvancedQuery
      */
-    useAdvancedQuery: ComponentOptions.buildBooleanOption({ defaultValue:false}),
+    useAdvancedQuery: ComponentOptions.buildBooleanOption({ defaultValue: false }),
     /**
      * usePush, if a push source must be used instead of checking all the results
      */
-    usePush: ComponentOptions.buildBooleanOption({ defaultValue:false}),
+    usePush: ComponentOptions.buildBooleanOption({ defaultValue: false }),
     /**
      * useOnlyUserFields, if you only want to use User Fields
      */
-    useOnlyUserFields: ComponentOptions.buildBooleanOption({ defaultValue:true}),
-    
+    useOnlyUserFields: ComponentOptions.buildBooleanOption({ defaultValue: true }),
+
     /**
      * usePushAsQuery, if the push should retrieve results instead of listFieldValues
      */
-    usePushAsQuery: ComponentOptions.buildBooleanOption({ defaultValue:false}),
+    usePushAsQuery: ComponentOptions.buildBooleanOption({ defaultValue: false }),
     /**
      * pushGroupField, field to get the values from when using usePush
      */
     pushGroupField: ComponentOptions.buildStringOption<string>(),
-    /**
-     * orgId to use
-     */
-    orgId: ComponentOptions.buildStringOption<string>(),
+   
     /**
      * noOfResults to retrieve when fetching the facet values
      */
@@ -153,9 +146,6 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
      */
     noOfFacets: ComponentOptions.buildNumberOption({ defaultValue: 10 }),
 
-    getDictionaryPromise: ComponentOptions.buildCustomOption<() => Promise<IQueryFacetDictionary>>(() => {
-      return null;
-    }),
   };
 
   /**
@@ -174,9 +164,8 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     this.previousState = '';
     this.gotFacets = false;
     this.blacklisted = this.options.blacklist.split(',');
-    //Coveo.load('DynamicFacet').then(DynamicFacet => { });
     this.bind.onRootElement(QueryEvents.buildingQuery, (args: IBuildingQueryEventArgs) => this.handleBuildingQuery(args));
-    this.bind.onRootElement(QueryEvents.querySuccess, (arg:IQuerySuccessEventArgs) => this.handleQuery(arg));
+    this.bind.onRootElement(QueryEvents.querySuccess, (arg: IQuerySuccessEventArgs) => this.handleQuery(arg));
     this.init();
   }
 
@@ -186,23 +175,24 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
 
   private handleQuery(args: IQuerySuccessEventArgs) {
     if (this.record) {
-    if (!args.searchAsYouType) {
-    let end = new Date();
-    let div = $$('div');
-    let time =  '<hr>Timer (ALL)             => '+(end.getTime()-this.start.getTime())+"<BR>";
-    if (this.endQ!=undefined && this.comment=='') {
-       time +=      'Timer (ParsingResults)  => '+(this.endQ.getTime()-this.startQ.getTime())+"<BR>";
-       time +=      'Timer (Re-Execute)      => '+(end.getTime()-this.endQ.getTime())+"<BR>";
+      if (!args.searchAsYouType) {
+        let end = new Date();
+        let div = $$('div');
+        let time = '<hr>Timer (ALL)             => ' + (end.getTime() - this.start.getTime()) + "<BR>";
+        if (this.endQ != undefined && this.comment == '') {
+          time += 'Timer (ParsingResults)  => ' + (this.endQ.getTime() - this.startQ.getTime()) + "<BR>";
+          time += 'Timer (Re-Execute)      => ' + (end.getTime() - this.endQ.getTime()) + "<BR>";
+        }
+        time = time + this.comment;
+        time = time + "Duration Facets Query => " + this.querytime;
+        if (args.results['index'] == 'cache') {
+          time = time + "<BR>FROM CACHE";
+        }
+        console.log(time);
+        div.el.innerHTML = time + '<br>';
+        this.element.prepend(div.el);
+      }
     }
-    time = time+this.comment;
-    time = time+"Duration Facets Query => "+this.querytime;
-    if (args.results['index']=='cache') {
-      time = time+"<BR>FROM CACHE";
-    }
-    console.log(time);
-    div.el.innerHTML = time+'<br>';
-    this.element.prepend(div.el);
-  } }
   }
   /**
    * Clears all current Dynamic Facets that have generated by this component
@@ -242,133 +232,81 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
       this.initLocalStorageFields();
       this.loadFieldsFromIndex();
     }
-    if (this.dictionary == null) {
-      if (this.options.useCache) {
-        this.initLocalStorage();
-        this.loadDictionaryFromCache();
-      }
+  }
 
-      // If there is nothing in the cache and the dictionary is still null, load from async method
-      if (this.dictionary == null) {
-        this.fetchDictionaryAsync();
+  private initLocalStorageFields() {
+    this.localStorageFields = new LocalStorageUtils<{ fields: string[], expDate: string }>(DynamicQueryFacetGenerator.ID + "F");
+  }
+  private saveFields() {
+    let date = new Date();
+    var pastDate = date.getDate() + 7;
+    date.setDate(pastDate);
+    this.localStorageFields.save({ fields: this.allFields, expDate: date.toDateString() });
+  }
+
+  private getFields() {
+    let retrieve = this.localStorageFields.load();
+    let curdate = new Date();
+    this.allFields = [];
+    if (retrieve != null) {
+      let expdate = new Date(retrieve.expDate);
+      if (curdate <= expdate) {
+        this.allFields = retrieve.fields;
       }
     }
-  }
-
-  private initLocalStorage() {
-    this.localStorage = new LocalStorageUtils<{ [caption: string]: string }>(DynamicQueryFacetGenerator.ID);
-  }
-  private initLocalStorageFields() {
-    this.localStorageFacets = new LocalStorageUtils<{ facets: string[] }>(DynamicQueryFacetGenerator.ID + "F");
   }
 
   private loadFieldsFromIndex() {
     //When using push do not load anything.
     let _this = this;
     if (this.options.usePush) return;
-    this.allFields=[];
-     this.queryController.getEndpoint().listFields().then((fields:Coveo.IFieldDescription[]) => {
-         fields.forEach((field)=> {
-           if (_this.options.useOnlyUserFields) {
-           if ((field.groupByField || field.splitGroupByField) && field.fieldSourceType!="System") {
-             this.allFields.push(field.name.replace('@',''));
-           }}
-           else {
-            if ((field.groupByField || field.splitGroupByField)) {
-              this.allFields.push(field.name.replace('@',''));
-            } 
-           }
-         });
-     });
-  }
-
-  private isParentAHierarchyFacet(): boolean {
-    return this.getParentFacet()?.type === DynamicHierarchicalFacet.ID;
-  }
-
-  /**
-   * Tries to load the dictionary from the Local Storage
-   *
-   * @private
-   */
-  private loadDictionaryFromCache() {
-    this.logger.debug('Loading dictionary from cache');
-    this.dictionary = this.localStorage.load();
-  }
-
-  /**
-   * Tries to load the dictionary from an async method provided as an option
-   *
-   * @private
-   */
-  private fetchDictionaryAsync() {
-    if (this.options.getDictionaryPromise) {
-      this.options
-        .getDictionaryPromise()
-        .then((dict) => {
-          this.dictionary = dict;
-          if (this.options.useCache) {
-            this.logger.debug('Saving dict into local storage');
-            this.localStorage.save(dict);
+    this.getFields();
+    if (this.allFields.length == 0) {
+      this.queryController.getEndpoint().listFields().then((fields: Coveo.IFieldDescription[]) => {
+        fields.forEach((field) => {
+          if (_this.options.useOnlyUserFields) {
+            if ((field.groupByField || field.splitGroupByField) && field.fieldSourceType != "System") {
+              this.allFields.push(field.name.replace('@', ''));
+            }
           }
-
-          //if (this.getAllowedFacets(this.getCurrentSelectedParentValue())) {
-          // Do not reload the search if the parent facet is not selected
-          //this.reloadSearch();
-          //}
-        })
-        .catch((err) => {
-          this.logger.error('Unable to fetch dictionary', err);
+          else {
+            if ((field.groupByField || field.splitGroupByField)) {
+              this.allFields.push(field.name.replace('@', ''));
+            }
+          }
         });
+        this.saveFields();
+      });
+      
     }
   }
 
-  /**
-   * Reloads the results by executing a search query. This method will only be called in the callback of the async method.
-   *
-   * @private
-   */
-  private reloadSearch() {
-    this.queryController.executeQuery({
-      beforeExecuteQuery: () => this.logCustomEvent(CustomEvents.updateFacetDictionary),
-      ignoreWarningSearchEvent: true,
-      logInActionsHistory: false,
-    });
+
+  private get allFacetsInInterface() {
+    return ComponentsTypes.getAllFacetInstancesFromElement(this.root) as Component[];
   }
 
-  private logCustomEvent(eventName: string) {
-    this.usageAnalytics.logCustomEvent({ name: eventName, type: 'customEventType' }, {}, this.root);
+  private getParentFacet() {
+    if (this.options.dependsOn == '' || this.options.dependsOn == undefined) return;
+    const parent = this.allFacetsInInterface.filter(
+      potentialParentFacet => potentialParentFacet.options.id === this.options.dependsOn
+    );
+
+    if (!parent.length) {
+      this.logger.warn('DependsOn reference does not exist', this.options.dependsOn);
+      return null;
+    }
+
+    return parent[0];
   }
 
-  /**
-   * Get the parent Facet to drive the generation of dynamic Facets
-   *
-   * @private
-   * @returns {Component}
-   */
-  private getParentFacet(): Component {
-    const masterFacetComponent = ComponentsTypes.getAllFacetInstancesFromElement(this.root).filter((cmp: Component) => {
-      const idFacet = _.reduce(ComponentsTypes.allFacetsType, (memo, type) => cmp instanceof type || memo, false);
-      return idFacet && cmp.options.id === this.options.dependsOn;
-    }) as Component[];
-
-    if (!masterFacetComponent.length) {
-      this.logger.warn(
-        `Unable to find a Facet with the id or field "${this.options.dependsOn}".`,
-        `The master facet values can't be updated.`
-      );
-      return;
+  public transform(facet) {
+    let title = facet;
+    //Get Facet from dictionary
+    if (this.dictionary[facet] != undefined) {
+      title = this.dictionary[facet];
     }
-    if (masterFacetComponent.length > 1) {
-      this.logger.warn(
-        `Multiple facets with id "${this.options.dependsOn}" found.`,
-        `A given facet may only depend on a single other facet.`,
-        `Ensure that each facet in your search interface has a unique id.`,
-        masterFacetComponent
-      );
-      return;
-    }
-    return masterFacetComponent[0];
+    return title;
   }
 
   /**
@@ -380,21 +318,17 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
   //private generateFacets(facets: IQueryFacetTransformArgs[]) {
   private generateFacets(facets: string[]) {
     facets.map((facet) => {
-      if (facet!='') {
-      const element = $$('div');
-      this.element.appendChild(element.el);
-      //const generatedFacet = new DynamicFacet(element.el, { field: facet.field, title: facet.facetTitle });
-      let fieldname='@'+facet;
-      let title = facet;
-      //Get Facet from dictionary
-      if (this.dictionary[facet]!=undefined){
-          title = this.dictionary[facet];
+      if (facet != '' && facet != undefined) {
+        const element = $$('div');
+        this.element.appendChild(element.el);
+        //const generatedFacet = new DynamicFacet(element.el, { field: facet.field, title: facet.facetTitle });
+        let fieldname = '@' + facet;
+        let title = this.transform(facet);
+        const generatedFacet = new Coveo.DynamicFacet(element.el, { field: fieldname, title: title, id: facet });
+        if (this.cacheFacets[fieldname] != undefined && this.cacheFacets[fieldname] != '') {
+          generatedFacet.selectMultipleValues(this.cacheFacets[fieldname]);
+        }
       }
-      const generatedFacet = new Coveo.DynamicFacet(element.el, { field: fieldname, title: title, id: facet });
-      if (this.cacheFacets[fieldname]!=undefined && this.cacheFacets[fieldname]!=''){
-        generatedFacet.selectMultipleValues(this.cacheFacets[fieldname]);
-      }
-    }
       //this.ensureFacetState(generatedFacet);
     });
   }
@@ -446,20 +380,33 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     //}
   }
 
-  private addCounts(foundFacets: FacetList[], key){
-    let found=false;
-     foundFacets.forEach((facet)=>{
-       if (facet.facet==key){
-         facet.occurences = facet.occurences+1;
-         found=true;
-       }
-     });
-     if (!found && !this.blacklisted.includes(key)) {
-       let newfacet = new FacetList();
-       newfacet.facet = key;
-       newfacet.occurences = 1;
-       foundFacets.push(newfacet);
-     }
+  private addCounts(foundFacets: FacetList[], key, value) {
+    let found = false;
+    foundFacets.forEach((facet) => {
+      if (facet.facet == key) {
+        facet.occurences = facet.occurences + 1;
+        if (Array.isArray(value)) {
+          value.forEach((val) => {
+            facet.values.push(val);
+          });
+        } else {
+          facet.values.push(value);
+        }
+        found = true;
+      }
+    });
+    if (!found && !this.blacklisted.includes(key)) {
+      let newfacet = new FacetList();
+      newfacet.facet = key;
+      newfacet.occurences = 1;
+      newfacet.values = [];
+      if (Array.isArray(value)) {
+        value.forEach((val) => {
+          newfacet.values.push(val);
+        });
+      } else newfacet.values.push(value);
+      foundFacets.push(newfacet);
+    }
   }
 
   /**
@@ -483,43 +430,52 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     queryBuilder.enableDuplicateFiltering = false;
     queryBuilder.excerptLength = 0;
     queryBuilder.numberOfResults = this.options.noOfResults;
-    if (this.options.queryToExecute!='')  queryBuilder.advancedExpression.add(this.options.queryToExecute);
+    if (this.options.queryToExecute != '') queryBuilder.advancedExpression.add(this.options.queryToExecute);
     var complete = query;
-    if (complete!='') queryBuilder.expression.add( complete );
+    if (complete != '') queryBuilder.expression.add(complete);
     var myquery = this.queryController.getEndpoint().search(queryBuilder.build());
 
-    myquery.then(function (data:Coveo.IQueryResults) {
+    myquery.then(function (data: Coveo.IQueryResults) {
       _this.startQ = new Date();
-      data.results.forEach((res:IQueryResult) => {
+      data.results.forEach((res: IQueryResult) => {
         let keys = Object.keys(res.raw);
         keys.forEach((key) => {
-            if (_this.allFields.includes(key)){
-              _this.addCounts(foundFacets,key);
-            }
-          });
+          if (_this.allFields.includes(key)) {
+            _this.addCounts(foundFacets, key, res.raw[key]);
+          }
         });
-        _this.querytime = data.duration.toString();
-        //Sort the list by occurrences
-        foundFacets.sort((a, b) => (a.occurences < b.occurences) ? 1 : -1);
-        //Only take first xx
-        //console.log('Found Facets: '+foundFacets);
-        let percentage = _this.options.noOfResults*(_this.options.tresholdPercentage/100);
-        _this.currentFacets = foundFacets.slice(0,_this.options.noOfFacets).map((facet)=> { if (facet.occurences>=percentage)  return facet.facet});
-        console.log('Got Facets, re-execute query');
-        _this.gotFacets = true;
-        _this.addToCache(query);
-        _this.endQ = new Date();
-        _this.queryController.executeQuery({
-          ignoreWarningSearchEvent: true,
-          logInActionsHistory: false,
-        });
+      });
+      _this.querytime = data.duration.toString();
+      //Sort the list by occurrences
+      foundFacets.sort((a, b) => (a.occurences < b.occurences) ? 1 : -1);
+      //Only take first xx
+      let total = data.totalCountFiltered;
+      if (total > _this.options.noOfResults) total = _this.options.noOfResults;
+      let percentage = total * (_this.options.tresholdPercentage / 100);
+      _this.currentFacets = foundFacets.slice(0, _this.options.noOfFacets).filter((facet) => {
+        let allvalues = new Set(facet.values);
+        let go = true;
+        if (allvalues.size <= 1) go = false;
+        //If it has values selected then discard size check
+        if (_this.cacheFacets['@' + facet.facet] != '' && _this.cacheFacets['@' + facet.facet] != undefined) go = true;
+        return (facet.occurences >= percentage && go);
+      }).map(facet => facet.facet);
+
+      console.log('Got Facets, re-execute query');
+      _this.gotFacets = true;
+      _this.addToCache(query);
+      _this.endQ = new Date();
+      _this.queryController.executeQuery({
+        ignoreWarningSearchEvent: true,
+        logInActionsHistory: false,
+      });
 
     });
 
 
   }
 
-  
+
   /**
    * Returns the facets based upon the current query
    *
@@ -537,38 +493,38 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     queryBuilder.enableDebug = false;
     queryBuilder.enableQuerySyntax = true;
     queryBuilder.enableDuplicateFiltering = false;
-    queryBuilder.sortCriteria ="datedescending";
+    queryBuilder.sortCriteria = "datedescending";
     queryBuilder.excerptLength = 0;
     queryBuilder.numberOfResults = this.options.noOfResults;
-    queryBuilder.fieldsToInclude=['@'+this.options.pushGroupField];
-    if (this.options.queryToExecute!='')  queryBuilder.advancedExpression.add(this.options.queryToExecute);
+    queryBuilder.fieldsToInclude = ['@' + this.options.pushGroupField];
+    if (this.options.queryToExecute != '') queryBuilder.advancedExpression.add(this.options.queryToExecute);
     var complete = query;
-    if (complete!='') queryBuilder.expression.add( complete );
+    if (complete != '') queryBuilder.expression.add(complete);
     var myquery = this.queryController.getEndpoint().search(queryBuilder.build());
 
-    myquery.then(function (data:Coveo.IQueryResults) {
-      data.results.forEach((res:IQueryResult) => {
+    myquery.then(function (data: Coveo.IQueryResults) {
+      data.results.forEach((res: IQueryResult) => {
         let facets = res.raw[_this.options.pushGroupField];
         facets.forEach((key) => {
-            //if (_this.allFields.includes(key)){
-              _this.addCounts(foundFacets,key);
-            //}
-          });
+          //if (_this.allFields.includes(key)){
+          _this.addCounts(foundFacets, key, facets);
+          //}
         });
-        _this.querytime = data.duration.toString();
-        //Sort the list by occurrences
-        foundFacets.sort((a, b) => (a.occurences < b.occurences) ? 1 : -1);
-        //Only take first xx
-        //console.log('Found Facets: '+foundFacets);
-        _this.currentFacets = foundFacets.slice(0,_this.options.noOfFacets).map((facet)=> { return facet.facet});
-        console.log('Got Facets, re-execute query');
-        _this.gotFacets = true;
-        _this.addToCache(query);
-        _this.queryController.executeQuery({
-          ignoreWarningSearchEvent: true,
-          logInActionsHistory: false,
-        });
-        return
+      });
+      _this.querytime = data.duration.toString();
+      //Sort the list by occurrences
+      foundFacets.sort((a, b) => (a.occurences < b.occurences) ? 1 : -1);
+      //Only take first xx
+      //console.log('Found Facets: '+foundFacets);
+      _this.currentFacets = foundFacets.slice(0, _this.options.noOfFacets).map((facet) => { return facet.facet });
+      console.log('Got Facets, re-execute query');
+      _this.gotFacets = true;
+      _this.addToCache(query);
+      _this.queryController.executeQuery({
+        ignoreWarningSearchEvent: true,
+        logInActionsHistory: false,
+      });
+      return
 
     });
 
@@ -586,24 +542,24 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     let _this = this;
     var foundFacets = [];
 
-    
+
     var myRequest = {
-      field: '@'+this.options.pushGroupField,
+      field: '@' + this.options.pushGroupField,
       sortCriteria: "occurrences",
       maximumNumberOfValues: this.options.noOfFacets,
-      queryOverride: query +' '+this.options.queryToExecute//args.queryBuilder.computeCompleteExpression()
+      queryOverride: query + ' ' + this.options.queryToExecute//args.queryBuilder.computeCompleteExpression()
     };
 
     Coveo.SearchEndpoint.endpoints.default
-    .listFieldValues(myRequest)
-    .then(function(response) {
-      var values = response;
-      var singles = [];
-      for (var i = 0; i < values.length; i++) {
-        singles.push(values[i].value);
-      }
-      _this.querytime = "N/A";
-      _this.currentFacets = singles;
+      .listFieldValues(myRequest)
+      .then(function (response) {
+        var values = response;
+        var singles = [];
+        for (var i = 0; i < values.length; i++) {
+          singles.push(values[i].value);
+        }
+        _this.querytime = "N/A";
+        _this.currentFacets = singles;
         console.log('Got Facets, re-execute query');
         _this.gotFacets = true;
         _this.addToCache(query);
@@ -612,134 +568,125 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
           logInActionsHistory: false,
         });
 
-    });
+      });
 
 
   }
 
-  /**
-   * Get the current selected value on the parent Facet
-   *
-   * @private
-   * @returns {(string | null)} The parent selected value or null if no value is found
-   */
-  private getCurrentSelectedParentValue(): string | null {
-    const facetAttributes = this.queryStateModel.attributes[QueryStateModel.getFacetId(this.options.dependsOn)] as string[];
 
-    if (facetAttributes) {
-      return facetAttributes.length > 0 ? (this.isParentAHierarchyFacet() ? last(facetAttributes) : facetAttributes[0]) : null;
-    } else {
-      this.logger.warn('Unable to find facet attribute', this.options.dependsOn);
-      return null;
-    }
-  }
 
-  /**
-   * Get the current value from facet
-   *
-   * @private
-   * @returns {(string | null)} The parent selected value or null if no value is found
-   */
-  private getFacetValue(id): string[] | null {
-    const facetAttributes = this.queryStateModel.attributes[QueryStateModel.getFacetId(id)] as string[];
-
-    if (facetAttributes) {
-      return facetAttributes.length > 0 ? facetAttributes : null;
-    } else {
-      return null;
-    }
-  }
-
-  private createAdvancedQuery(){
-    let adv="";
-    let allFacets = document.querySelectorAll(".CoveoDynamicFacet");
+  private createAdvancedQuery() {
+    let adv = "";
+    let allFacets = document.querySelectorAll(".CoveoDynamicFacet,.CoveoDynamicHierarchicalFacet");
     allFacets.forEach((facet) => {
+      let field = '';
+      let values = [];
       //@ts-ignore
-      let field = facet.CoveoDynamicFacet.options.field;
-      this.cacheFacets[field]='';
-      //@ts-ignore
-      let values = facet.CoveoDynamicFacet.values.selectedValues;
-         if (values!=null && values.length>0){
-          this.cacheFacets[field]=values;
-           const expressionFromFacet = new ExpressionBuilder();
-           expressionFromFacet.addFieldExpression(field, "==", values);
-           adv = adv + ' '+expressionFromFacet.build();
-         }
+      if (facet.CoveoDynamicFacet != undefined) {
+        //@ts-ignore
+        field = facet.CoveoDynamicFacet.options.field;
+        this.cacheFacets[field] = '';
+        //@ts-ignore
+        values = facet.CoveoDynamicFacet.values.selectedValues;
+      } else {
+        //@ts-ignore
+        field = facet.CoveoDynamicHierarchicalFacet.options.field;
+        this.cacheFacets[field] = '';
+        //@ts-ignore
+        values = facet.CoveoDynamicHierarchicalFacet.values.selectedPath;
+      }
+      if (values != null && values.length > 0) {
+        this.cacheFacets[field] = values;
+        const expressionFromFacet = new ExpressionBuilder();
+        expressionFromFacet.addFieldExpression(field, "==", values);
+        adv = adv + ' ' + expressionFromFacet.build();
+      }
     });
     return adv;
   }
 
-  private getFromCache(query):string {
-    let facets="";
-    this.myCache.forEach((item)=> {
+  private getFromCache(query): string {
+    let facets = "";
+    this.myCache.forEach((item) => {
       if (item.query == query) {
-        facets=item.facets;
+        facets = item.facets;
       }
     });
     return facets;
   }
 
   private addToCache(query) {
-     if (this.getFromCache(query)=='') {
-       let newitem = new CacheList();
-       newitem.query = query;
-       newitem.facets = this.currentFacets.join(';');
-       this.myCache.push(newitem);
-     }
+    if (this.getFromCache(query) == '') {
+      let newitem = new CacheList();
+      newitem.query = query;
+      newitem.facets = this.currentFacets.join(';');
+      this.myCache.push(newitem);
+    }
   }
 
   private handleBuildingQuery(args: IBuildingQueryEventArgs) {
-    let currentQuery = Coveo.state(this.root,'q');
-    let currentState = JSON.stringify(this.queryStateModel.attributes);
+    //Check if depends on is set
+    let go = false;
+    //Check if dependend facet is selected
+    let parent = this.getParentFacet();
+    if (parent == null) { go = true; }
+    //@ts-ignore
+    if (parent != null && parent.values.selectedValues.length != 0) {
+      go = true;
+    }
+    if (go == false) {
+      //Clear the added facets
+      this.clearGeneratedFacet();
+    }
+    if (go) {
+      let currentQuery = Coveo.state(this.root, 'q');
+      let currentState = JSON.stringify(this.queryStateModel.attributes);
 
-    let facets = [];
-    this.comment="";
-    this.record=false;
-    if (currentQuery != undefined) {
-      console.log("Handle Building Query, currentQuery is NOT empty");
-      if (this.previousQuery != currentQuery || (currentState!=this.previousState && this.options.useAdvancedQuery)) {
-        //Cancel query if we do not have the facets yet
-        console.log("Query is different we need to do more");
-        
-        if (!this.gotFacets) {
-          console.log("Facets are NOT retrieved, do it now");
-          this.start = new Date();
-          if (this.options.useAdvancedQuery){
-            let advanced = this.createAdvancedQuery();
-            currentQuery = currentQuery +' '+advanced;
-          }
-          let fromCache = this.getFromCache(currentQuery);
-          if (fromCache!='') {
-            this.currentFacets = fromCache.split(';');
-            console.log('From cache');
-            this.querytime = '0';
-            this.comment="FROM FACET CACHE<BR>";
-          }
-          else {
-            args.cancel;
-            console.log('Cancel current query, because we need to fetch the needed facets first');
+      let facets = [];
+      this.comment = "";
+      this.record = false;
+      if (currentQuery != undefined) {
+        console.log("Handle Building Query, currentQuery is NOT empty");
+        if (this.previousQuery != currentQuery || (currentState != this.previousState && this.options.useAdvancedQuery)) {
+          //Cancel query if we do not have the facets yet
+          console.log("Query is different we need to do more");
+
+          if (!this.gotFacets) {
+            console.log("Facets are NOT retrieved, do it now");
+            this.start = new Date();
+            if (this.options.useAdvancedQuery) {
+              let advanced = this.createAdvancedQuery();
+              currentQuery = currentQuery + ' ' + advanced;
+            }
+            let fromCache = this.getFromCache(currentQuery);
+            if (fromCache != '') {
+              this.currentFacets = fromCache.split(';');
+              console.log('From FACET cache');
+              this.querytime = '0';
+              this.comment = "FROM FACET CACHE<BR>";
+            }
+            else {
+              args.cancel = true;
+              console.log('Cancel current query, because we need to fetch the needed facets first');
               if (this.options.usePush) {
-              if (this.options.usePushAsQuery) {
-                this.getFacetsFromPushQueryResults(currentQuery);
-              } else this.getFacetsFromPushQuery(currentQuery);
-            } else this.getFacetsFromQuery(currentQuery);
-            return;
+                if (this.options.usePushAsQuery) {
+                  this.getFacetsFromPushQueryResults(currentQuery);
+                } else this.getFacetsFromPushQuery(currentQuery);
+              } else this.getFacetsFromQuery(currentQuery);
+              return;
+            }
+
           }
-          
-        }
-        this.record=true;
-        console.log("Facets are retrieved, update the UI");
-        this.previousQuery = currentQuery;
-        this.previousState = currentState;
-        this.gotFacets = false;
-        //if (this.allFields.length != 0 && this.getParentFacet()) {
-          //console.log('Adding facets: '+this.currentFacets);
-          
+          this.record = true;
+          console.log("Facets are retrieved, update the UI");
+          this.previousQuery = currentQuery;
+          this.previousState = currentState;
+          this.gotFacets = false;
           this.updateDynamicFacetAppareance(this.currentFacets);
 
-        //}
-      }
+        }
 
+      }
     }
   }
 }
