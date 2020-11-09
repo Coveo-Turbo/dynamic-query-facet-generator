@@ -387,9 +387,8 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
       queryBuilder.advancedExpression.add(this.options.queryToExecute);
     }
 
-    let complete = query;
-    if (complete) {
-      queryBuilder.expression.add(complete);
+    if (query) {
+      queryBuilder.expression.add(query);
     }
     let myqueryPromise = this.queryController.getEndpoint().search(queryBuilder.build());
 
@@ -458,9 +457,9 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     if (this.options.queryToExecute != '') {
       queryBuilder.advancedExpression.add(this.options.queryToExecute);
     }
-    let complete = query;
-    if (complete != '') {
-      queryBuilder.expression.add(complete);
+
+    if (query) {
+      queryBuilder.expression.add(query);
     }
     let myqueryPromise = this.queryController.getEndpoint().search(queryBuilder.build());
 
@@ -502,7 +501,7 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
       field: '@' + this.options.pushGroupField,
       sortCriteria: "occurrences",
       maximumNumberOfValues: this.options.noOfFacets,
-      queryOverride: query + ' ' + this.options.queryToExecute//args.queryBuilder.computeCompleteExpression()
+      queryOverride: query + ' ' + this.options.queryToExecute,
     };
 
     Coveo.SearchEndpoint.endpoints.default
