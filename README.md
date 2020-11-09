@@ -34,7 +34,7 @@ Javascript
 ```javascript
 const DynamicQueryFacetGenerator = require('@coveops/dynamic-query-facet-generator').DynamicQueryFacetGenerator;
 ```
- 
+
 3. You can also expose the component alongside other components being built in your project.
 
 ```javascript
@@ -101,6 +101,7 @@ The following options can be configured:
 | `noOfResults` | No | number | `15` | How many results must be examines when checking for facet values. Recommendation: 15 |
 | `noOfFacets` | No | number | `10` | How many facets must be added to the UI |
 | `dependsOn` | No | string | `` | Which other facet does this component rely on. Only when this facet has a selection the facets will be added. |
+| `debug` | No | boolean | `false` | Show the timing information for the facet requests. |
 | `useAdvancedQuery` | No | boolean | `false` | Must the advanced query (the facet selections) also be used to retrieve the facets. |
 | `useOnlyUserFields` | No | boolean | `true` | When retrieving facet fields from the index. Only use 'User' defined fields. Else 'System' fields will also be used. |
 | `usePush` | No | boolean | `false` | Use the Push approach (query the index on a specific push source). Make sure that the `queryToExecute` points to the push source. This will use the getValues of the defined facet (`pushGroupField`)|
