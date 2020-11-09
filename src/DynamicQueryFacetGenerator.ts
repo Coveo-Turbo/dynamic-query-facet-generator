@@ -305,7 +305,7 @@ export class DynamicQueryFacetGenerator extends Component implements IComponentB
     }
     else {
       // parse title and remove underscores with spaces
-      title = (title || '').replace(/_/g, ' ');
+      title = (title || '').replace(/^F_/i, '').replace(/_/g, ' ');
     }
     return title;
   }
